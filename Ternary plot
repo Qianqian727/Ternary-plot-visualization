@@ -9,7 +9,7 @@ from matplotlib.patches import ArrowStyle, FancyArrowPatch
 from matplotlib.legend_handler import HandlerPatch
 
  # read data 
-data = pd.read_excel('test ternary plot.xlsx', sheet_name = 'Sheet2')
+data = pd.read_excel('test ternary plot.xlsx', sheet_name = 'Sheet1')
 
 t = data['RSI (Physiology)'].tolist()
 l = data['RSI(CS)'].tolist()
