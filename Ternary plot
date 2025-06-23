@@ -1,159 +1,113 @@
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import mpltern
-from adjustText import adjust_text
-from matplotlib.patches import ArrowStyle, FancyArrowPatch
+import plotly.graph_objects as go
+from numpy.linalg import norm
 
-from matplotlib.legend_handler import HandlerPatch
+# Read data
+df = pd.read_excel("data.xlsx")
 
- # read data 
-data = pd.read_excel('test ternary plot.xlsx', sheet_name = 'Sheet1')
+# Normalize RSI values by adding an offset to make all values positive
+offset = abs(min(df["RSI (Physiology)"].min(), df["RSI(CS)"].min(), df["RSI(RD)"].min())) + 0.0001
+df["RSI (Physiology)"] += offset
+df["RSI(CS)"] += offset
+df["RSI(RD)"] += offset
 
-t = data['RSI (Physiology)'].tolist()
-l = data['RSI(CS)'].tolist()
-r= data['RSI(RD)'].tolist()
-labels1 = data['Country'].values.tolist()
-# plot ternary
-ax = plt.subplot(projection="ternary", ternary_sum=3)
-ax.set_ternary_min(0.4, 0.6, 0.6)
-# Specify tick positions manually.
-tticks = [0.4,0.7, 1.0, 1.3, 1.6, 1.8]
-lticks = [0.6, 0.9, 1.2, 1.5, 1.8, 2.1]
-rticks = [0.6, 0.9, 1.2, 1.5, 1.8, 2.1]
-ticks = [0.0, 0.6,  1.2,  1.8, 2.4, 3.0]
-#labelst = ["0.6", " 0.9", "1.2", "1.5", "1.8", "2.1"]
-#ax.taxis.set_ticks(ticks, labels = tticks)
-#ax.laxis.set_ticks(ticks, labels =lticks )
-#ax.raxis.set_ticks(ticks, labels =rticks )
+# Ternary normalization
+df_sum = df[["RSI (Physiology)", "RSI(CS)", "RSI(RD)"]].sum(axis=1)
+df["RSI (Physiology)"] = df["RSI (Physiology)"] / df_sum
+df["RSI(CS)"] = df["RSI(CS)"] / df_sum
+df["RSI(RD)"] = df["RSI(RD)"] / df_sum
 
-ax.taxis.set_label_position('tick1')
-ax.laxis.set_label_position('tick1')
-ax.raxis.set_label_position('tick1')
+# Create ternary coordinates a, b, c
+df["a"] = df["RSI (Physiology)"]
+df["b"] = df["RSI(CS)"]
+df["c"] = df["RSI(RD)"]
 
-### fill the polygon
+# Filter out overly long labels (e.g., limit to max length of 20)
+df["Label"] = df["Funders"].apply(lambda x: x if len(str(x)) <= 20 else "")
 
-t1 = [1.8, 1.4, 1.0, 1.4]
-l1 = [0.6, 1.0, 1.0, 0.6]
-r1 = [0.6, 0.6, 1.0, 1.0]
-ax.fill(t1, l1, r1, ec="k", fc='#F27970', alpha=0.7, zorder=1)
+# Initialize figure
+fig = go.Figure()
 
-t2 = [1.0, 1.0, 1.4]
-l2 = [0.6, 1.0, 0.6]
-r2 = [1.4, 1.0, 1.0]
-ax.fill(t2, l2, r2, ec="k", fc='#BB9727', alpha=0.7, zorder=1)
-
-t3 = [1.0, 1.0, 1.4]
-l3 = [1.4, 1.0, 1.0]
-r3 = [0.6, 1.0, 0.6]
-ax.fill(t3, l3, r3, ec="k", fc='#54B345', alpha=0.7, zorder=1)
-
-t4 = [1.0, 1.0,  0.3, 0.3]
-l4 = [1.4, 1.0,  1.7, 2.1]
-r4 = [0.6, 1.0,  1.0, 0.6]
-ax.fill(t4, l4, r4, ec="k", fc='#32B897', alpha=0.7, zorder=1)
-
-t5 = [0.3, 1.0, 0.3]
-l5 = [1.7, 1.0, 1.0]
-r5 = [1.0, 1.0, 1.7]
-ax.fill(t5, l5, r5, ec="k", fc='#05B9E2', alpha=0.7, zorder=1)
-
-t6 = [1.0, 0.3, 0.3, 1.0]
-l6 = [1.0, 1.0, 0.6, 0.6]
-r6 = [1.0, 1.7, 2.1, 1.4]
-ax.fill(t6, l6, r6, ec="k", fc='#8983BF', alpha=0.7, zorder=1)
-
-###### Plot the arrows
-
-arrowstyle = ArrowStyle('simple', head_length=10, head_width=5)
-kwargs_arrow = {
-    'transform': ax.transAxes,  # Used with ``ax.transAxesProjection``
-    'arrowstyle': arrowstyle,
-    'linewidth': 1,
-    'clip_on': False,  # To plot arrows outside triangle
-    'zorder': -10,  # Very low value not to hide e.g. tick labels.
+# Add region shading
+regions = {
+    "A": {"a": [1.0, 2/3, 1/3, 2/3, 1.0], "b": [0.0, 1/3, 1/3, 0.0, 0.0], "c": [0.0, 0.0, 1/3, 1/3, 0.0], "color": "rgba(242, 121, 112, 0.8)", "name": "Physiology Studies"},
+    "B": {"a": [2/3, 1/3, 1/3, 2/3], "b": [1/3, 2/3, 1/3, 1/3], "c": [0.0, 0.0, 1/3, 0.0], "color": "rgba(187, 151, 39, 0.8)", "name": "Physiology Studies and Clinical Studies"},
+    "C": {"a": [2/3, 1/3, 1/3, 2/3], "b": [0.0, 1/3, 0.0, 0.0], "c": [1/3, 1/3, 2/3, 1/3], "color": "rgba(84, 179, 69, 0.8)", "name": "Physiology Studies and Risk Factors & Diagnosis Techniques"},
+    "D": {"a": [1/3, 1/3, 0.0, 0.0, 1/3], "b": [2/3, 1/3, 2/3, 1.0, 2/3], "c": [0.0, 1/3, 1/3, 0.0, 0.0], "color": "rgba(50, 184, 151, 0.8)", "name": "Risk Factors & Diagnosis Techniques"},
+    "E": {"a": [1/3, 0.0, 0.0, 1/3], "b": [1/3, 1/3, 2/3, 1/3], "c": [1/3, 2/3, 1/3, 1/3], "color": "rgba(5, 185, 226, 0.8)", "name": "Clinical Studies and Risk Factors & Diagnosis Techniques"},
+    "F": {"a": [0.0, 0.0, 1/3, 1/3, 0.0], "b": [0.0, 1/3, 1/3, 0.0, 0.0], "c": [1.0, 2/3, 1/3, 2/3, 1.0], "color": "rgba(137, 131, 191, 0.8)", "name": "Clinical Studies"},
 }
 
-# Start of arrows in barycentric coordinates.
-ta = np.array([ 0.1, -0.13,  1.0])
-la = np.array([ 0.9,  0.2, -0.13])
-ra = np.array([-0.13,  0.9,  0.2])
+for region in regions.values():
+    fig.add_trace(go.Scatterternary(
+        a=region["a"], b=region["b"], c=region["c"],
+        mode='lines', fill='toself',
+        fillcolor=region["color"],
+        line=dict(color='rgba(255,255,255,0)'),
+        name=region["name"],
+        hoverinfo='skip',
+        showlegend=True
+    ))
 
-# End of arrows in barycentric coordinates.
-tb = np.array([ 0.9, -0.13,  0.2])
-lb = np.array([ 0.1,  1.0, -0.13])
-rb = np.array([-0.13,  0.1,  1.0])
-
-# This transforms the above barycentric coordinates to the original Axes
-# coordinates. In combination with ``ax.transAxes``, we can plot arrows fixed
-# to the Axes coordinates.
-f = ax.transAxesProjection.transform
-
-tarrow = FancyArrowPatch(f(ta), f(tb), ec='black', fc='black', **kwargs_arrow)
-larrow = FancyArrowPatch(f(la), f(lb), ec='black', fc='black', **kwargs_arrow)
-rarrow = FancyArrowPatch(f(ra), f(rb), ec='black', fc='black', **kwargs_arrow)
-ax.add_patch(tarrow)
-ax.add_patch(larrow)
-ax.add_patch(rarrow)
-
-# To put the axis-labels at the positions consistent with the arrows above, it
-# may be better to put the axis-label-text directly as follows rather than
-# using e.g.  ax.set_tlabel.
-kwargs_label = {
-    'transform': ax.transTernaryAxes,
-    'backgroundcolor': 'w',
-    'ha': 'center',
-    'va': 'center',
-    'rotation_mode': 'anchor',
-    'zorder': -9,  # A bit higher on arrows, but still lower than others.
+# Add region labels A-F
+region_labels = {
+    "A": {"text": "A", "a": 0.8, "b": 0.1, "c": 0.1},
+    "B": {"text": "B", "a": 0.47, "b": 0.43, "c": 0.1},
+    "C": {"text": "C", "a": 0.47, "b": 0.05, "c": 0.48},
+    "D": {"text": "D", "a": 0.1, "b": 0.8, "c": 0.1},
+    "E": {"text": "E", "a": 0.03, "b": 0.4, "c": 0.57},
+    "F": {"text": "F", "a": 0.1, "b": 0.1, "c": 0.8},
 }
 
-# Put axis-labels on the midpoints of arrows.
-tpos = (ta + tb) * 0.5
-lpos = (la + lb) * 0.5
-rpos = (ra + rb) * 0.5
+for label in region_labels.values():
+    fig.add_trace(go.Scatterternary(
+        a=[label["a"]], b=[label["b"]], c=[label["c"]],
+        mode='text', text=[label["text"]],
+        textfont=dict(family="Times New Roman", size=14, color="black"),
+        showlegend=False
+    ))
 
-ax.text(*tpos, 'Physiology Studies'  , color='black', rotation=-60, **kwargs_label)
-ax.text(*lpos, 'Clinical Studies' , color='black', rotation= 60, **kwargs_label)
-ax.text(*rpos, 'Risk Factors & Diagnosis Techniques', color='black', rotation=  0, **kwargs_label)
+# Add data points
+fig.add_trace(go.Scatterternary(
+    a=df["a"], b=df["b"], c=df["c"],
+    mode='markers',
+    marker=dict(size=11, color='grey'),
+    showlegend=False
+))
 
+# Draw outer border
+fig.add_trace(go.Scatterternary(
+    a=[1, 0, 0, 1], b=[0, 1, 0, 0], c=[0, 0, 1, 0],
+    mode='lines', line=dict(color='black', width=1.5), showlegend=False))
 
+# Add dashed lines for RSI = -0.33
+fig.add_trace(go.Scatterternary(
+    a=[1/3, 1/3], b=[0.0, 2/3], c=[2/3, 0.0], mode='lines', line=dict(color='black', width=0.5, dash='dash'), showlegend=False))
+fig.add_trace(go.Scatterternary(
+    a=[0.0, 2/3], b=[1/3, 1/3], c=[2/3, 0.0], mode='lines', line=dict(color='black', width=0.5, dash='dash'), showlegend=False))
+fig.add_trace(go.Scatterternary(
+    a=[0.0, 2/3], b=[2/3, 0.0], c=[1/3, 1/3], mode='lines', line=dict(color='black', width=0.5, dash='dash'), showlegend=False))
 
-### Group label
-ax.text(1.7, 0.65, 0.65, 'A', ha='center', va='center')
-ax.text(1.3, 1.05, 0.65, 'B', ha='center', va='center')
-ax.text(1.3, 0.65, 1.05, 'C', ha='center', va='center')
-ax.text(0.45, 2.0, 0.65, 'D', ha='center', va='center')
-ax.text(0.45, 1.3, 1.35, 'E', ha='center', va='center')
-ax.text(0.45, 0.7, 2.0, 'F', ha='center', va='center')
+# Axis and legend settings
+fig.update_layout(
+    ternary=dict(
+        sum=1,
+        aaxis=dict(title=" ", tickvals=[], ticktext=[], gridcolor='gray', gridwidth=0.5, griddash='dot'),
+        baxis=dict(title=" ", tickvals=[], ticktext=[], gridcolor='gray', gridwidth=0.5, griddash='dot'),
+        caxis=dict(title=" ", tickvals=[], ticktext=[], gridcolor='gray', gridwidth=0.5, griddash='dot'),
+    ),
+    font=dict(family="Times New Roman", size=12),
+    annotations=[
+        dict(text="RSI (Risk Factors & Diagnosis Techniques)", x=0.5, y=-0.1, xref="paper", yref="paper", showarrow=False, font=dict(family="Times New Roman", color="black", size=16), align='center'),
+        dict(text="RSI (Clinical Studies)", x=0.15, y=0.5, xref="paper", yref="paper", showarrow=False, textangle=-60, font=dict(family="Times New Roman", color="black", size=16), align='center'),
+        dict(text="RSI(Physiology Studies)", x=0.85, y=0.5, xref="paper", yref="paper", showarrow=False, textangle=60, font=dict(family="Times New Roman", color="black", size=16), align='center'),
+    ],
+    legend=dict(
+        orientation="v", yanchor="top", y=1, xanchor="left", x=1.02,
+        font=dict(size=14, color="black", family="Times New Roman"),
+        bgcolor='rgba(255,255,255,0.8)', borderwidth=0)
+)
 
-# show grid
-#ax.grid() 
-
-##legend
-A_patch = mpatches.Patch(color='#F27970', label='Physiology Studies')
-B_patch = mpatches.Patch(color='#54B345', label='Physiology Studies and Risk Factors & Diagnosis Techniques')
-C_patch = mpatches.Patch(color='#BB9727', label='Physiology Studies and Clinical Studies')
-D_patch = mpatches.Patch(color='#32B897', label='Risk Factors & Diagnosis Techniques')
-E_patch = mpatches.Patch(color='#05B9E2', label='Clinical Studies and Risk Factors & Diagnosis Techniques')
-F_patch = mpatches.Patch(color='#8983BF', label='Clinical Studies')
-ax.legend(handles=[A_patch,B_patch, C_patch, D_patch, E_patch,F_patch], 
-          bbox_to_anchor=(0.5, -0.52),
-          loc='lower center', 
-          borderaxespad=0.)
-# plot scatters 
-ax.scatter(t,l,r, s= 150, c= '#696969',alpha=1)
-    
-# plot labels
-new_texts = []
-for i, label1 in enumerate(labels1):
-    new_text = ax.text(t[i], l[i], r[i], label1,fontsize=8, fontweight ='bold' ,ha = 'left')
-    new_texts.append(new_text)
-adjust_text(new_texts,
-            #only_move = {'text': 'x'},
-            arrowprops=dict(arrowstyle='->',color='red',lw=1.0) 
-           )
-
-
-plt.show()
+# Export figure
+fig.write_image("ternary_plot_highres1.png", width=800, height=600, scale=3)
+fig.show()
