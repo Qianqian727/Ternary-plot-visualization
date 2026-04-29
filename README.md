@@ -3,7 +3,7 @@ This project visualizes the specialization of research funders across three scie
 Physiology Studies; Clinical Studies; Risk Factors & Diagnosis Techniques.
 The plot divides the ternary space into six meaningful regions labeled A–F, each representing different combinations of specialization. The project is implemented in Python using Plotly for interactive plotting and Pandas for data manipulation.
 
-To visualize the specialization of research funders in a ternary coordinate system, we first transform their RSI (Research Specialization Index) values into a form suitable for ternary plotting. This process ensures that each data point lies inside the triangle, meaning the values must be non-negative and sum to 1.
+To visualize the specialization of research funders in a ternary coordinate system, we first transform their RSI (Relative Specialization Index) values into a form suitable for ternary plotting. This process ensures that each data point lies inside the triangle, meaning the values must be non-negative and sum to 1.
 
 Here’s how this transformation is done:
 
