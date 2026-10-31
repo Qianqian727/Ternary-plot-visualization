@@ -1,0 +1,247 @@
+import math
+from pathlib import Path
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle, ConnectionPatch
+from matplotlib.lines import Line2D
+
+# -------------------- Data --------------------
+data = [
+    ('United States', 'US', 1.043185, 1.040772, 0.918618),
+    ('China', 'CN', 1.683414, 0.820234, 0.916757),
+    ('Japan', 'JP', 1.006148, 0.910022, 1.133997),
+    ('Germany', 'DE', 1.054729, 1.089260, 0.908787),
+    ('Italy', 'IT', 0.748743, 1.091674, 0.982495),
+    ('United Kingdom', 'GB', 0.898743, 1.037128, 0.959161),
+    ('Canada', 'CA', 1.047947, 1.102542, 0.872280),
+    ('Netherlands', 'NL', 0.769423, 0.941968, 1.148773),
+    ('France', 'FR', 0.961755, 1.115831, 0.915512),
+    ('Spain', 'ES', 0.887030, 1.000986, 1.058671),
+    ('South Korea', 'KR', 0.739943, 1.089847, 1.102765),
+    ('South Africa', 'ZA', 0.850833, 0.596219, 1.381053),
+    ('Turkey', 'TR', 0.424317, 1.184725, 1.143777),
+    ('Brazil', 'BR', 1.090357, 0.697699, 1.238257),
+    ('India', 'IN', 1.258205, 1.046800, 0.862740),
+]
+
+df = pd.DataFrame(data, columns=['country', 'abbr', 'AI_PS', 'AI_CS', 'AI_RD'])
+df['sum_ai'] = df[['AI_PS', 'AI_CS', 'AI_RD']].sum(axis=1)
+df['PS_n'] = df['AI_PS'] / df['sum_ai']
+df['CS_n'] = df['AI_CS'] / df['sum_ai']
+df['RD_n'] = df['AI_RD'] / df['sum_ai']
+
+# -------------------- Geometry --------------------
+h = math.sqrt(3) / 2
+V_CS = (0.0, 0.0)
+V_RD = (1.0, 0.0)
+V_PS = (0.5, h)
+
+def ternary_to_cart(ps, cs, rd):
+    x = 0.5 * ps + rd
+    y = h * ps
+    return x, y
+
+coords = df.apply(lambda r: ternary_to_cart(r['PS_n'], r['CS_n'], r['RD_n']), axis=1)
+df['x'] = [c[0] for c in coords]
+df['y'] = [c[1] for c in coords]
+
+# -------------------- Style --------------------
+plt.rcParams.update({
+    'font.family': 'serif',
+    'font.serif': ['Times New Roman', 'Tinos', 'DejaVu Serif'],
+    'font.size': 10.5,
+    'pdf.fonttype': 42,
+    'ps.fonttype': 42,
+    'svg.fonttype': 'none',
+})
+
+BLUE = '#3F5C99'
+RED = '#E4573D'
+GREEN = '#00A087'
+POINT = '#4DB4D7'
+POINT_EDGE = '#3B7A8D'
+STAR = '#8C6D1F'
+GRID = '#B8B8B8'
+TEXT = '#222222'
+BOX = '#666666'
+
+# label offsets on main plot
+main_offsets = {
+    'DE': (-8, 12), 'CN': (-10, 12), 'IN': (10, 10), 'FR': (-10, 8), 'CA': (-12, -2),
+    'US': (0, 12), 'GB': (-4, -12), 'KR': (0, -14), 'IT': (-4, -14), 'ES': (12, -10),
+    'NL': (10, -16), 'ZA': (10, -2), 'BR': (10, 2), 'JP': (12, 10), 'TR': (8, -2),
+}
+
+zoom = {'xmin': 0.43, 'xmax': 0.555, 'ymin': 0.19, 'ymax': 0.375}
+df['in_zoom'] = df['x'].between(zoom['xmin'], zoom['xmax']) & df['y'].between(zoom['ymin'], zoom['ymax'])
+
+# inset label positions (with leader lines where useful)
+inset_positions = {
+    'DE': (-14, 14, True),
+    'IN': (10, 16, True),
+    'FR': (-16, 6, True),
+    'CA': (-18, -2, True),
+    'US': (0, 14, True),
+    'GB': (-10, -12, True),
+    'KR': (0, -18, True),
+    'IT': (-2, -16, True),
+    'ES': (14, -6, True),
+    'NL': (0, -12, True),
+    'JP': (0, 12, True),
+}
+
+# -------------------- Helpers --------------------
+def interp(p0, p1, t):
+    return (p0[0] * (1 - t) + p1[0] * t, p0[1] * (1 - t) + p1[1] * t)
+
+def unit(vx, vy):
+    norm = math.hypot(vx, vy)
+    return vx / norm, vy / norm
+
+def offset_point(pt, nx, ny, d):
+    return (pt[0] + nx * d, pt[1] + ny * d)
+
+def draw_triangle(ax):
+    vals = [i / 10 for i in range(1, 10)]
+    for t in vals:
+        p1 = ternary_to_cart(t, 1 - t, 0); p2 = ternary_to_cart(t, 0, 1 - t)
+        ax.plot([p1[0], p2[0]], [p1[1], p2[1]], ls='--', lw=0.95, color=GRID, zorder=0)
+        p1 = ternary_to_cart(0, t, 1 - t); p2 = ternary_to_cart(1 - t, t, 0)
+        ax.plot([p1[0], p2[0]], [p1[1], p2[1]], ls='--', lw=0.95, color=GRID, zorder=0)
+        p1 = ternary_to_cart(0, 1 - t, t); p2 = ternary_to_cart(1 - t, 0, t)
+        ax.plot([p1[0], p2[0]], [p1[1], p2[1]], ls='--', lw=0.95, color=GRID, zorder=0)
+
+    ax.plot([V_CS[0], V_PS[0]], [V_CS[1], V_PS[1]], color=BLUE, lw=2.6, zorder=1)
+    ax.plot([V_PS[0], V_RD[0]], [V_PS[1], V_RD[1]], color=RED, lw=2.6, zorder=1)
+    ax.plot([V_CS[0], V_RD[0]], [V_CS[1], V_RD[1]], color=GREEN, lw=2.6, zorder=1)
+
+def draw_ticks_labels_and_arrows(ax, tick_font=12.5, axis_font=16.2):
+    for v in [i / 10 for i in range(0, 11)]:
+        x, y = interp(V_CS, V_PS, v)
+        ax.text(x - 0.05, y, f'{v:.1f}', color=BLUE, fontsize=tick_font,
+                rotation=60, ha='right', va='center')
+    for c in [1 - i / 10 for i in range(0, 11)]:
+        x = 1 - c
+        ax.text(x, -0.055, f'{c:.1f}', color=GREEN, fontsize=tick_font,
+                ha='center', va='top')
+    for r in [i / 10 for i in range(0, 11)]:
+        x, y = interp(V_PS, V_RD, r)
+        ax.text(x + 0.048, y, f'{r:.1f}', color=RED, fontsize=tick_font,
+                rotation=-60, ha='left', va='center')
+
+    lv = (V_PS[0] - V_CS[0], V_PS[1] - V_CS[1])
+    lnorm = unit(-lv[1], lv[0])
+    p_start = offset_point(interp(V_CS, V_PS, 0.10), *lnorm, 0.09)
+    p_end = offset_point(interp(V_CS, V_PS, 0.95), *lnorm, 0.09)
+    ax.annotate('', xy=p_end, xytext=p_start, arrowprops=dict(arrowstyle='-|>', lw=1.9, color=BLUE))
+    ltext_start = offset_point(interp(V_CS, V_PS, 0.18), *lnorm, 0.14)
+    ltext_end = offset_point(interp(V_CS, V_PS, 0.82), *lnorm, 0.14)
+    lmid = ((ltext_start[0] + ltext_end[0]) / 2, (ltext_start[1] + ltext_end[1]) / 2)
+    ax.text(lmid[0], lmid[1], 'Physiology studies', color=BLUE, fontsize=axis_font,
+            rotation=60, ha='center', va='center')
+
+    yb = -0.095
+    ax.annotate('', xy=(0.18, yb), xytext=(0.82, yb), arrowprops=dict(arrowstyle='-|>', lw=1.9, color=GREEN))
+    ax.text(0.50, -0.155, 'Clinical studies', color=GREEN, fontsize=axis_font,
+            ha='center', va='center')
+
+    rv = (V_RD[0] - V_PS[0], V_RD[1] - V_PS[1])
+    rnorm = unit(-rv[1], rv[0])
+    p_start = offset_point(interp(V_PS, V_RD, 0.10), *rnorm, 0.09)
+    p_end = offset_point(interp(V_PS, V_RD, 0.93), *rnorm, 0.09)
+    ax.annotate('', xy=p_end, xytext=p_start, arrowprops=dict(arrowstyle='-|>', lw=1.9, color=RED))
+    rtext_start = offset_point(interp(V_PS, V_RD, 0.17), *rnorm, 0.15)
+    rtext_end = offset_point(interp(V_PS, V_RD, 0.80), *rnorm, 0.15)
+    rmid = ((rtext_start[0] + rtext_end[0]) / 2, (rtext_start[1] + rtext_end[1]) / 2)
+    ax.text(rmid[0], rmid[1], 'Risk factors & diagnosis techniques', color=RED,
+            fontsize=axis_font, rotation=-60, ha='center', va='center')
+
+def style_axes(ax):
+    ax.set_xlim(-0.16, 1.18)
+    ax.set_ylim(-0.20, h + 0.08)
+    ax.set_aspect('equal')
+    ax.axis('off')
+
+def draw_points(ax, data, size=78):
+    ax.scatter(data['x'], data['y'], s=size, color=POINT, edgecolor=POINT_EDGE, linewidth=0.65, zorder=3)
+
+def add_main_labels(ax, data, font=12):
+    for _, row in data.iterrows():
+        dx, dy = main_offsets.get(row['abbr'], (8, 8))
+        ax.annotate(row['abbr'], (row['x'], row['y']), xytext=(dx, dy), textcoords='offset points',
+                    fontsize=font, ha='left' if dx >= 0 else 'right', va='center', color=TEXT)
+
+def add_inset_labels(ax, data, font=11):
+    for _, row in data.iterrows():
+        dx, dy, leader = inset_positions.get(row['abbr'], (8, 8, False))
+        arrowprops = dict(arrowstyle='-', lw=0.65, color='#666666', shrinkA=2, shrinkB=2) if leader else None
+        ax.annotate(row['abbr'], (row['x'], row['y']), xytext=(dx, dy), textcoords='offset points',
+                    fontsize=font, ha='left' if dx >= 0 else 'right', va='center', color=TEXT,
+                    arrowprops=arrowprops)
+
+def add_world_reference(ax, size=230):
+    xw, yw = ternary_to_cart(1/3, 1/3, 1/3)
+    ax.scatter([xw], [yw], marker='*', s=size, color=STAR, edgecolor=STAR, zorder=4)
+    return xw, yw
+
+# -------------------- Figure --------------------
+fig = plt.figure(figsize=(10.1, 8.3))
+ax = fig.add_axes([0.04, 0.08, 0.80, 0.86])
+
+draw_triangle(ax)
+draw_ticks_labels_and_arrows(ax)
+style_axes(ax)
+draw_points(ax, df)
+main_df = df[~df['in_zoom']].copy()
+add_main_labels(ax, main_df, font=12)
+xw, yw = add_world_reference(ax, size=235)
+
+rect = Rectangle((zoom['xmin'], zoom['ymin']), zoom['xmax'] - zoom['xmin'], zoom['ymax'] - zoom['ymin'],
+                 fill=False, ec=BOX, lw=1.35, ls='--', zorder=2)
+ax.add_patch(rect)
+
+axins = fig.add_axes([0.735, 0.54, 0.235, 0.29])
+draw_triangle(axins)
+zoom_df = df[df['in_zoom']].copy()
+draw_points(axins, zoom_df, size=68)
+axins.scatter([xw], [yw], marker='*', s=170, color=STAR, edgecolor=STAR, zorder=4)
+add_inset_labels(axins, zoom_df, font=10.5)
+axins.set_xlim(zoom['xmin'], zoom['xmax'])
+axins.set_ylim(zoom['ymin'], zoom['ymax'])
+axins.set_aspect('equal')
+axins.set_xticks([]); axins.set_yticks([])
+for spine in axins.spines.values():
+    spine.set_visible(True)
+    spine.set_linewidth(1.15)
+    spine.set_edgecolor(BOX)
+axins.set_title('Zoomed view', fontsize=12.5, pad=4)
+
+con1 = ConnectionPatch(xyA=(zoom['xmax'], zoom['ymax']), coordsA=ax.transData,
+                       xyB=(zoom['xmin'], zoom['ymax']), coordsB=axins.transData,
+                       color=BOX, lw=1.0, ls='--')
+con2 = ConnectionPatch(xyA=(zoom['xmax'], zoom['ymin']), coordsA=ax.transData,
+                       xyB=(zoom['xmin'], zoom['ymin']), coordsB=axins.transData,
+                       color=BOX, lw=1.0, ls='--')
+fig.add_artist(con1)
+fig.add_artist(con2)
+
+handles = [
+    Line2D([0], [0], marker='o', color='none', markerfacecolor=POINT, markeredgecolor=POINT_EDGE,
+           markeredgewidth=0.65, markersize=9.5, label='Country'),
+    Line2D([0], [0], marker='*', color='none', markerfacecolor=STAR, markeredgecolor=STAR,
+           markersize=13.0, label='World reference')
+]
+fig.legend(handles=handles, loc='upper center', bbox_to_anchor=(0.84, 0.47), ncol=1,
+           frameon=False, fontsize=11.7, handletextpad=0.55, columnspacing=1.0)
+
+# save
+outdir = Path.cwd()
+prefix = outdir / 'national_research_ternary_zoom_refined2'
+for ext in ['svg']:
+    fig.savefig(prefix.with_suffix(f'.{ext}'), dpi=600 if ext == 'png' else None, bbox_inches='tight')
+plt.close(fig)
+
+print(prefix.with_suffix('.svg'))
+print(outdir / 'national_research_ternary_zoom.py')
