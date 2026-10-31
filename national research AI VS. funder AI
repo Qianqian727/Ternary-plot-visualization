@@ -1,0 +1,253 @@
+"""national research vs. domestic-funder specialisation (4 x 2).
+
+Rows a–c: original (un-normalised) Activity Index (AI), by subdomain.
+Row d: Euclidean distance over the original three AI coordinates.
+Columns: first and second domestic funder for each of 15 countries.
+"""
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.ticker import FixedLocator, FormatStrFormatter
+
+OUTDIR = Path(__file__).resolve().parent if '__file__' in globals() else Path.cwd()
+PREFIX = OUTDIR / 'national_funder_4x2_A4_fullpage'
+
+# The original country-level (research) AI data: no normalisation/RSI conversion.
+national = pd.DataFrame([
+    ('United States', 1.043185, 1.040772, 0.918618),
+    ('China', 1.683414, 0.820234, 0.916757),
+    ('Japan', 1.006148, 0.910022, 1.133997),
+    ('Germany', 1.054729, 1.089260, 0.908787),
+    ('Italy', 0.748743, 1.091674, 0.982495),
+    ('United Kingdom', 0.898743, 1.037128, 0.959161),
+    ('Canada', 1.047947, 1.102542, 0.872280),
+    ('Netherlands', 0.769423, 0.941968, 1.148773),
+    ('France', 0.961755, 1.115831, 0.915512),
+    ('Spain', 0.887030, 1.000986, 1.058671),
+    ('South Korea', 0.739943, 1.089847, 1.102765),
+    ('South Africa', 0.850833, 0.596219, 1.381053),
+    ('Turkey', 0.424317, 1.184725, 1.143777),
+    ('Brazil', 1.090357, 0.697699, 1.238257),
+    ('India', 1.258205, 1.046800, 0.862740),
+], columns=['country', 'nat_PS', 'nat_CS', 'nat_RD'])
+
+# The original two domestic funders per country, unchanged from the user's data.
+pairs = {
+    'Brazil': [('CNPq', 1.170, 0.410, 1.140), ('FAPESP', 1.230, 0.450, 0.710)],
+    'Canada': [('CIHR', 1.150, 1.200, 0.800), ('Heart & Stroke Foundation', 1.100, 1.310, 0.770)],
+    'China': [('NSFC', 1.490, 0.880, 0.720), ('MOST', 1.200, 0.940, 0.930)],
+    'France': [('Fondation Leducq', 1.460, 0.750, 0.690), ('INSERM', 1.500, 0.660, 0.810)],
+    'Germany': [('BMBF', 0.790, 0.960, 1.140), ('DFG', 1.700, 0.600, 0.660)],
+    'India': [('ICMR', 0.820, 0.740, 1.270), ('DST', 2.110, 0.100, 0.660)],
+    'Italy': [('MOH_IT', 1.120, 0.790, 0.930), ('MUR', 1.280, 0.500, 0.840)],
+    'Japan': [('MHLW', 0.680, 0.820, 1.330), ('MEXT', 1.230, 0.540, 1.070)],
+    'Netherlands': [('NOW', 0.760, 0.870, 1.210), ('DHF', 0.680, 0.990, 1.220)],
+    'South Africa': [('SAMRC', 0.510, 0.660, 1.470), ('NRF', 0.670, 0.240, 1.550)],
+    'South Korea': [('NRF_KR', 0.960, 1.160, 1.010), ('MOHW', 0.580, 1.920, 0.960)],
+    'Spain': [('ISCIII', 0.940, 0.910, 1.070), ('GoC', 0.780, 1.040, 1.110)],
+    'Turkey': [('Istanbul University', 1.000, 0.230, 1.390), ('TUBITAK', 1.630, 1.230, 0.480)],
+    'United Kingdom': [('BHF', 1.030, 0.960, 0.960), ('Department of Health', 0.390, 1.610, 1.130)],
+    'United States': [('NIH', 1.080, 1.750, 0.990), ('AHA', 1.470, 2.390, 0.790)],
+}
+
+abbr = {
+    'United States': 'US', 'China': 'CN', 'Japan': 'JP', 'Germany': 'DE',
+    'Italy': 'IT', 'United Kingdom': 'GB', 'Canada': 'CA',
+    'Netherlands': 'NL', 'France': 'FR', 'Spain': 'ES',
+    'South Korea': 'KR', 'South Africa': 'ZA', 'Turkey': 'TR',
+    'Brazil': 'BR', 'India': 'IN',
+}
+
+
+# ---------------------- Same palette and labels as the revised 2x2 ---------
+RESEARCH_COLOR = '#2F6C8F'
+FUNDING_COLOR = '#C77C59'
+CONNECTOR_COLOR = '#90969B'
+BAR_COLOR = '#73C5A1'
+BAR_EDGE = '#4C9E81'
+GRID_COLOR = '#E4E7E8'
+REFERENCE_COLOR = '#B5BABE'
+LABEL_COLOR = '#1F2930'
+TICK_COLOR = '#000000'
+
+# Exactly A4 PORTRAIT. Use the full-page PDF as a standalone thesis page;
+# DO NOT put it into Word as a 6-inch inline image, as that would shrink text.
+PAGE_W, PAGE_H = (8.2677165, 11.6929134)
+FIGSIZE = (PAGE_W, PAGE_H)
+DPI = 600
+COUNTRY_FONTSIZE = 8.5      # Actual size on printed A4, NOT scaling from a larger canvas
+TICK_FONTSIZE = 8.6
+TITLE_FONTSIZE = 9.8
+AXIS_LABEL_FONTSIZE = 9.1
+LEGEND_FONTSIZE = 9.2
+VALUE_FONTSIZE = 8.2
+COLUMN_TITLE_FONTSIZE = 11.5
+BAR_HEIGHT = 0.56
+LABEL_DIGITS = 2
+
+# Same limits and major ticks for all six AI panels, even though agency AI up to 2.39.
+AI_XLIM = (0.0, 2.6)
+AI_TICKS = (0.0, 0.5, 1.0, 1.5, 2.0, 2.5)
+DIST_XLIM = (0.0, 2.0)
+DIST_TICKS = (0.0, 0.5, 1.0, 1.5, 2.0)
+
+assert len(national) == 15 and national.country.is_unique
+assert set(national.country) == set(pairs) == set(abbr)
+assert all(len(pair) == 2 for pair in pairs.values())
+
+def build_funder_set(set_index):
+    rows = []
+    for country, pair in pairs.items():
+        funder, ps, cs, rd = pair[set_index]
+        rows.append((country, funder, ps, cs, rd))
+    agencies = pd.DataFrame(rows,
+        columns=['country', 'funder', 'fund_PS', 'fund_CS', 'fund_RD'])
+    data = national.merge(agencies, how='inner', on='country', validate='one_to_one')
+    assert len(data) == 15 and not data.isnull().any().any()
+    data['country_abbr'] = data['country'].map(abbr)
+    data['funder_set'] = f'Funder set {set_index+1}'
+    for key in ('PS', 'CS', 'RD'):
+        data[f'diff_{key}'] = data[f'nat_{key}'] - data[f'fund_{key}']
+    data['distance'] = np.sqrt(sum(data[f'diff_{key}'] ** 2
+                                   for key in ('PS', 'CS', 'RD')))
+    return data.sort_values(['distance', 'country'],
+                            ascending=[False, True]).reset_index(drop=True)
+
+set1 = build_funder_set(0)
+set2 = build_funder_set(1)
+assert set1['distance'].max() < DIST_XLIM[1] - 0.35, 'Increase distance axis for labels.'
+assert set2['distance'].max() < DIST_XLIM[1] - 0.35, 'Increase distance axis for labels.'
+
+output_data = pd.concat([set1, set2], ignore_index=True)
+output_data['row_in_column'] = np.tile(np.arange(1, 16), 2)
+output_data.to_csv(PREFIX.with_name(PREFIX.name + '_data.csv'),
+                   index=False, encoding='utf-8-sig')
+
+# Tinos is the metrics-compatible Times replacement on Linux. On machines
+# with Times New Roman installed, Matplotlib selects that first.
+plt.rcParams.update({
+    'font.family': 'serif',
+    'font.serif': ['Times New Roman', 'Tinos', 'Liberation Serif', 'DejaVu Serif'],
+    'font.size': 9.0,
+    'axes.titlesize': TITLE_FONTSIZE,
+    'axes.labelsize': AXIS_LABEL_FONTSIZE,
+    'xtick.labelsize': TICK_FONTSIZE,
+    'ytick.labelsize': COUNTRY_FONTSIZE,
+    'pdf.fonttype': 42,
+    'ps.fonttype': 42,
+    'svg.fonttype': 'none',
+    'figure.facecolor': 'white',
+    'savefig.facecolor': 'white',
+})
+
+fig = plt.figure(figsize=FIGSIZE, facecolor='white')
+# Exact coordinates in INCHES. These keep all text at its stated physical
+# font size when the A4 PDF is printed or inserted as a full-page figure.
+AX_LEFTS = (0.53, 4.38)
+AX_WIDTH = 3.35
+AX_HEIGHT = 1.85
+AX_BOTTOMS = (8.95, 6.41, 3.87, 1.33)
+
+axes = [[fig.add_axes((AX_LEFTS[c]/PAGE_W, AX_BOTTOMS[r]/PAGE_H,
+                       AX_WIDTH/PAGE_W, AX_HEIGHT/PAGE_H))
+         for c in range(2)] for r in range(4)]
+
+def style_panel(ax, data):
+    n = len(data)
+    y = np.arange(n)
+    ax.set_axisbelow(True)
+    ax.grid(axis='y', color=GRID_COLOR, linewidth=0.55)
+    ax.grid(axis='x', visible=False)
+    for spine in ('top', 'right', 'left'):
+        ax.spines[spine].set_visible(False)
+    ax.spines['bottom'].set_color('#BFC6CC')
+    ax.spines['bottom'].set_linewidth(0.60)
+    ax.set_yticks(y)
+    ax.set_yticklabels(data['country_abbr'], fontsize=COUNTRY_FONTSIZE,
+                       color=LABEL_COLOR)
+    ax.set_ylim(n-0.5, -0.5)
+    ax.tick_params(axis='y', left=False, labelleft=True, pad=2)
+    ax.tick_params(axis='x', colors=TICK_COLOR, width=0.65,
+                   length=2.2, pad=2.5, labelsize=TICK_FONTSIZE)
+    ax.xaxis.label.set_color(LABEL_COLOR)
+
+def plot_dumbbell(ax, data, key, title):
+    y = np.arange(len(data))
+    rv = data[f'nat_{key}'].to_numpy()
+    fv = data[f'fund_{key}'].to_numpy()
+    for yi, a, b in zip(y, rv, fv):
+        ax.plot((a,b), (yi,yi), lw=0.75, color=CONNECTOR_COLOR,
+                solid_capstyle='round', zorder=2)
+    ax.scatter(rv, y, s=19, marker='o', color=RESEARCH_COLOR,
+               edgecolors='white', linewidths=0.25, zorder=4)
+    ax.scatter(fv, y, s=23, marker='D', color=FUNDING_COLOR,
+               edgecolors='white', linewidths=0.25, zorder=5)
+    ax.axvline(1, color=REFERENCE_COLOR, lw=0.85,
+               linestyle=(0,(2.6,3)), zorder=1)
+    ax.set_xlim(AI_XLIM)
+    ax.xaxis.set_major_locator(FixedLocator(AI_TICKS))
+    ax.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    style_panel(ax, data)
+    ax.set_title(title, loc='left', color=LABEL_COLOR,
+                 fontsize=TITLE_FONTSIZE, pad=4.0)
+    ax.set_xlabel('Activity index (AI)', labelpad=3.2,
+                  fontsize=AXIS_LABEL_FONTSIZE)
+
+def plot_distance(ax, data, title):
+    y = np.arange(len(data))
+    ax.barh(y, data['distance'], color=BAR_COLOR, edgecolor=BAR_EDGE,
+            linewidth=0.40, height=BAR_HEIGHT, zorder=3)
+    ax.set_xlim(DIST_XLIM)
+    ax.xaxis.set_major_locator(FixedLocator(DIST_TICKS))
+    ax.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    style_panel(ax, data)
+    for yi, value in zip(y, data['distance']):
+        ax.annotate(f'{value:.{LABEL_DIGITS}f}', (value, yi),
+                    xytext=(2.5,0), textcoords='offset points',
+                    ha='left', va='center', fontsize=VALUE_FONTSIZE,
+                    color=LABEL_COLOR, zorder=4)
+    ax.set_title(title, loc='left', color=LABEL_COLOR,
+                 fontsize=TITLE_FONTSIZE, pad=4.0)
+    ax.set_xlabel('Euclidean distance', labelpad=3.2,
+                  fontsize=AXIS_LABEL_FONTSIZE)
+
+row_specs = (
+    ('PS', 'A  Physiology studies'),
+    ('CS', 'B  Clinical studies'),
+    ('RD', 'C  Risk factors & diagnosis techniques'),
+)
+for col, dataset in enumerate((set1, set2)):
+    for row, (key, title) in enumerate(row_specs):
+        plot_dumbbell(axes[row][col], dataset, key, title)
+    plot_distance(axes[3][col], dataset, 'D  Euclidean distance')
+
+for x, title in zip(AX_LEFTS, ('Funder set 1', 'Funder set 2')):
+    fig.text((x+AX_WIDTH/2)/PAGE_W, 11.30/PAGE_H, title,
+             fontsize=COLUMN_TITLE_FONTSIZE, color=LABEL_COLOR,
+             va='center', ha='center')
+
+legend = [
+    Line2D([0], [0], linestyle='None', marker='o', markersize=6.4,
+           markerfacecolor=RESEARCH_COLOR, markeredgecolor='white',
+           label='Research specialisation'),
+    Line2D([0], [0], linestyle='None', marker='D', markersize=6.4,
+           markerfacecolor=FUNDING_COLOR, markeredgecolor='white',
+           label='Funding specialisation'),
+]
+fig.legend(handles=legend, loc='center', frameon=False, ncol=2,
+           bbox_to_anchor=(0.50, 0.49/PAGE_H),
+           fontsize=LEGEND_FONTSIZE, handletextpad=0.40,
+           columnspacing=1.7)
+
+# Deliberately DO NOT use bbox_inches='tight': it changes the page size.
+# This PDF must remain exactly one A4 portrait sheet.
+for ext in ('svg'):
+    fig.savefig(PREFIX.with_suffix('.'+ext),
+                dpi=DPI if ext == 'png' else None,
+                facecolor='white', bbox_inches=None)
+plt.close(fig)
